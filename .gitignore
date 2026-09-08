@@ -1,0 +1,29 @@
+# Python Virtual Environment
+venv/
+ENV/
+env/
+.venv/
+
+# Python Byte Code & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# macOS System Files
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# MediaPipe Model Cache (Optional local download)
+hand_landmarker.task
+
+# IDE / Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary / Scratch Files
+scratch/
+*.log
