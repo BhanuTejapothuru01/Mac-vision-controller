@@ -1,6 +1,6 @@
 """
 VisionMac - Action Engine
-Direct Native macOS CoreGraphics (Quartz) OS Control Engine
+Dual-Driver Native macOS Quartz CoreGraphics + PyAutoGUI Execution Engine
 """
 
 import time
@@ -18,7 +18,7 @@ except Exception:
 import pyautogui
 import config
 
-# Disable PyAutoGUI default delay
+# Disable PyAutoGUI default delay for real-time responsiveness
 pyautogui.PAUSE = 0.0
 pyautogui.FAILSAFE = False
 
@@ -37,7 +37,7 @@ class ActionEngine:
         dry_run: bool = config.DRY_RUN_MODE
     ):
         """
-        Initializes ActionEngine with Native macOS Quartz acceleration.
+        Initializes ActionEngine with Dual Native macOS Acceleration.
         """
         self.smoothing_alpha = smoothing_alpha
         self.dead_zone_px = dead_zone_px
@@ -51,7 +51,7 @@ class ActionEngine:
         except Exception:
             self.screen_w, self.screen_h = 1470, 956
 
-        print(f"[ActionEngine] Native Quartz Driver Active: {HAS_QUARTZ} (Display: {self.screen_w}x{self.screen_h})")
+        print(f"[ActionEngine] Dual Engine Active (Quartz: {HAS_QUARTZ}, Screen: {self.screen_w}x{self.screen_h})")
 
         # Position tracking for EMA smoothing
         self.prev_screen_x: Optional[float] = None
@@ -82,7 +82,7 @@ class ActionEngine:
         return screen_x, screen_y
 
     def move_cursor(self, norm_x: float, norm_y: float) -> Tuple[int, int]:
-        """Moves macOS system cursor using native Quartz kernel calls."""
+        """Moves macOS system cursor using native Quartz kernel calls + PyAutoGUI fallback."""
         if self.is_paused:
             return int(self.prev_screen_x or 0), int(self.prev_screen_y or 0)
 
@@ -104,9 +104,16 @@ class ActionEngine:
 
         if not self.dry_run:
             if HAS_QUARTZ:
+                # 1. Physical Cursor Warp
                 CG.CGWarpMouseCursorPosition((target_x, target_y))
-            else:
+                # 2. Post MouseMoved event to notify OS applications of hover
+                move_evt = CG.CGEventCreateMouseEvent(None, CG.kCGEventMouseMoved, (target_x, target_y), CG.kCGMouseButtonLeft)
+                CG.CGEventPost(CG.kCGHIDEventTap, move_evt)
+
+            try:
                 pyautogui.moveTo(int(target_x), int(target_y), _pause=False)
+            except Exception:
+                pass
         else:
             print(f"[DRY RUN] moveTo({target_x}, {target_y})")
 
@@ -116,7 +123,7 @@ class ActionEngine:
         return int(target_x), int(target_y)
 
     def left_click(self) -> bool:
-        """Executes native macOS left click with debounce protection."""
+        """Executes native macOS left click with dual-engine event dispatch."""
         if self.is_paused:
             return False
 
@@ -131,16 +138,19 @@ class ActionEngine:
                     CG.CGEventPost(CG.kCGHIDEventTap, down)
                     time.sleep(0.01)
                     CG.CGEventPost(CG.kCGHIDEventTap, up)
-                else:
+
+                try:
                     pyautogui.click(_pause=False)
-                print("[VisionMac] Native Left Click Executed")
+                except Exception:
+                    pass
+                print("[VisionMac] Left Click Executed!")
             else:
                 print("[DRY RUN] LEFT CLICK executed")
             return True
         return False
 
     def right_click(self) -> bool:
-        """Executes native macOS right click with debounce protection."""
+        """Executes native macOS right click with dual-engine event dispatch."""
         if self.is_paused:
             return False
 
@@ -155,9 +165,12 @@ class ActionEngine:
                     CG.CGEventPost(CG.kCGHIDEventTap, down)
                     time.sleep(0.01)
                     CG.CGEventPost(CG.kCGHIDEventTap, up)
-                else:
+
+                try:
                     pyautogui.rightClick(_pause=False)
-                print("[VisionMac] Native Right Click Executed")
+                except Exception:
+                    pass
+                print("[VisionMac] Right Click Executed!")
             else:
                 print("[DRY RUN] RIGHT CLICK executed")
             return True
@@ -179,18 +192,19 @@ class ActionEngine:
         if abs(delta_y) < 0.003:
             return 0
 
-        scroll_units = int(-delta_y * 120.0)
+        scroll_units = int(-delta_y * 150.0)
 
         if scroll_units != 0:
             if not self.dry_run:
                 if HAS_QUARTZ:
-                    event = CG.CGEventCreateScrollWheelEvent(None, CG.kCGScrollEventUnitPixel, 1, scroll_units * 5)
+                    event = CG.CGEventCreateScrollWheelEvent(None, CG.kCGScrollEventUnitLine, 1, scroll_units)
                     CG.CGEventPost(CG.kCGHIDEventTap, event)
-                else:
-                    pyautogui.scroll(scroll_units, _pause=False)
-            else:
-                print(f"[DRY RUN] SCROLL executed: {scroll_units} units")
 
+                try:
+                    pyautogui.scroll(scroll_units, _pause=False)
+                except Exception:
+                    pass
+                print(f"[VisionMac] Scroll Executed: {scroll_units} units")
         return scroll_units
 
     def set_pause(self, paused: bool) -> bool:
