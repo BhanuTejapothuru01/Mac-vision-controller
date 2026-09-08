@@ -51,7 +51,7 @@ class ActionEngine:
         except Exception:
             self.screen_w, self.screen_h = 1470, 956
 
-        print(f"[ActionEngine] Native Quartz Driver Active: {HAS_QUARTZ}")
+        print(f"[ActionEngine] Native Quartz Driver Active: {HAS_QUARTZ} (Display: {self.screen_w}x{self.screen_h})")
 
         # Position tracking for EMA smoothing
         self.prev_screen_x: Optional[float] = None
@@ -104,7 +104,6 @@ class ActionEngine:
 
         if not self.dry_run:
             if HAS_QUARTZ:
-                # Direct Native macOS Kernel Cursor Warp
                 CG.CGWarpMouseCursorPosition((target_x, target_y))
             else:
                 pyautogui.moveTo(int(target_x), int(target_y), _pause=False)
@@ -130,6 +129,7 @@ class ActionEngine:
                     down = CG.CGEventCreateMouseEvent(None, CG.kCGEventLeftMouseDown, point, CG.kCGMouseButtonLeft)
                     up = CG.CGEventCreateMouseEvent(None, CG.kCGEventLeftMouseUp, point, CG.kCGMouseButtonLeft)
                     CG.CGEventPost(CG.kCGHIDEventTap, down)
+                    time.sleep(0.01)
                     CG.CGEventPost(CG.kCGHIDEventTap, up)
                 else:
                     pyautogui.click(_pause=False)
@@ -153,6 +153,7 @@ class ActionEngine:
                     down = CG.CGEventCreateMouseEvent(None, CG.kCGEventRightMouseDown, point, CG.kCGMouseButtonRight)
                     up = CG.CGEventCreateMouseEvent(None, CG.kCGEventRightMouseUp, point, CG.kCGMouseButtonRight)
                     CG.CGEventPost(CG.kCGHIDEventTap, down)
+                    time.sleep(0.01)
                     CG.CGEventPost(CG.kCGHIDEventTap, up)
                 else:
                     pyautogui.rightClick(_pause=False)
@@ -175,22 +176,22 @@ class ActionEngine:
         delta_y = current_mid_y - self.prev_scroll_mid_y
         self.prev_scroll_mid_y = current_mid_y
 
-        if abs(delta_y) < 0.005:
+        if abs(delta_y) < 0.003:
             return 0
 
-        scroll_clicks = int(-delta_y * config.SCROLL_SENSITIVITY * 40.0)
+        scroll_units = int(-delta_y * 120.0)
 
-        if scroll_clicks != 0:
+        if scroll_units != 0:
             if not self.dry_run:
                 if HAS_QUARTZ:
-                    event = CG.CGEventCreateScrollWheelEvent(None, CG.kCGScrollEventUnitLine, 1, scroll_clicks)
+                    event = CG.CGEventCreateScrollWheelEvent(None, CG.kCGScrollEventUnitPixel, 1, scroll_units * 5)
                     CG.CGEventPost(CG.kCGHIDEventTap, event)
                 else:
-                    pyautogui.scroll(scroll_clicks, _pause=False)
+                    pyautogui.scroll(scroll_units, _pause=False)
             else:
-                print(f"[DRY RUN] SCROLL executed: {scroll_clicks} clicks")
+                print(f"[DRY RUN] SCROLL executed: {scroll_units} units")
 
-        return scroll_clicks
+        return scroll_units
 
     def set_pause(self, paused: bool) -> bool:
         """Sets global pause state."""
