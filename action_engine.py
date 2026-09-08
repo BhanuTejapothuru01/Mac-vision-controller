@@ -40,8 +40,9 @@ class ActionEngine:
         # macOS Screen Resolution
         try:
             self.screen_w, self.screen_h = pyautogui.size()
-        except Exception:
-            self.screen_w, self.screen_h = 1920, 1080
+        except Exception as e:
+            print(f"[ActionEngine Warning] Could not query pyautogui.size(): {e}")
+            self.screen_w, self.screen_h = 1470, 956
 
         # State tracking for EMA smoothing
         self.prev_screen_x: Optional[float] = None
@@ -94,9 +95,9 @@ class ActionEngine:
 
         if not self.dry_run:
             try:
-                pyautogui.moveTo(target_x, target_y)
+                pyautogui.moveTo(target_x, target_y, _pause=False)
             except Exception as e:
-                print(f"[ActionEngine Warning] moveTo failed: {e}")
+                print(f"[ActionEngine Warning] moveTo({target_x}, {target_y}) failed: {e}")
         else:
             print(f"[DRY RUN] moveTo({target_x}, {target_y})")
 
@@ -115,7 +116,8 @@ class ActionEngine:
             self.last_left_click_time = now
             if not self.dry_run:
                 try:
-                    pyautogui.click()
+                    pyautogui.click(_pause=False)
+                    print("[VisionMac] Executed Left Click")
                 except Exception as e:
                     print(f"[ActionEngine Warning] click failed: {e}")
             else:
@@ -133,7 +135,8 @@ class ActionEngine:
             self.last_right_click_time = now
             if not self.dry_run:
                 try:
-                    pyautogui.rightClick()
+                    pyautogui.rightClick(_pause=False)
+                    print("[VisionMac] Executed Right Click")
                 except Exception as e:
                     print(f"[ActionEngine Warning] rightClick failed: {e}")
             else:
@@ -156,18 +159,15 @@ class ActionEngine:
         delta_y = current_mid_y - self.prev_scroll_mid_y
         self.prev_scroll_mid_y = current_mid_y
 
-        # Dead-zone threshold for micro vertical movement
         if abs(delta_y) < 0.005:
             return 0
 
-        # Moving fingers UP (delta_y < 0) -> scroll UP (+clicks)
-        # Moving fingers DOWN (delta_y > 0) -> scroll DOWN (-clicks)
         scroll_clicks = int(-delta_y * config.SCROLL_SENSITIVITY * 100.0)
 
         if scroll_clicks != 0:
             if not self.dry_run:
                 try:
-                    pyautogui.scroll(scroll_clicks)
+                    pyautogui.scroll(scroll_clicks, _pause=False)
                 except Exception as e:
                     print(f"[ActionEngine Warning] scroll failed: {e}")
             else:
