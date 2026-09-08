@@ -1,6 +1,6 @@
 """
 VisionMac - Main Entry Point
-Phase 6: Full Integration with Floating Status HUD & Safety Controls
+Ultra-Responsive Hand & Cursor Control System
 """
 
 import time
@@ -16,47 +16,47 @@ from action_engine import ActionEngine
 from overlay_ui import StatusOverlayUI
 
 GESTURE_EMOJI_MAP = {
-    GESTURE_POINT: "☝️ POINT",
-    GESTURE_PINCH: "🤏 PINCH",
-    GESTURE_TWO_FINGER: "✌️ TWO_FINGER",
-    GESTURE_FIST: "✊ FIST",
-    GESTURE_OPEN_PALM: "🖐️ OPEN_PALM",
-    GESTURE_NONE: "❓ NONE"
+    GESTURE_POINT: "☝️ POINT (Move Mouse)",
+    GESTURE_PINCH: "🤏 PINCH (Left Click)",
+    GESTURE_TWO_FINGER: "✌️ TWO_FINGER (Scroll)",
+    GESTURE_FIST: "✊ FIST (Right Click)",
+    GESTURE_OPEN_PALM: "🖐️ OPEN_PALM (Pause)",
+    GESTURE_NONE: "🖐️ TRACKING (Move Mouse)"
 }
 
 
 def main():
-    """Main VisionMac application loop."""
-    print("[VisionMac] Starting VisionMac Touchless Controller...")
-    cap = cv2.VideoCapture(config.CAMERA_INDEX)
+    print("=" * 60)
+    print(" 🖐️ VisionMac - macOS Touchless Controller Starting...")
+    print("=" * 60)
 
+    cap = cv2.VideoCapture(config.CAMERA_INDEX)
     if not cap.isOpened():
         print(f"[ERROR] Could not open camera index {config.CAMERA_INDEX}.")
-        print("Please check macOS System Settings > Privacy & Security > Camera permissions.")
+        print("Please check macOS System Settings > Privacy & Security > Camera.")
         sys.exit(1)
 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
 
     tracker = HandTracker(max_hands=1)
-    recognizer = GestureRecognizer(history_size=3)
+    recognizer = GestureRecognizer(history_size=2)  # Fast 2-frame response
     action_engine = ActionEngine(
-        smoothing_alpha=config.SMOOTHING_ALPHA,
-        dead_zone_px=config.DEAD_ZONE_PX,
-        margin_x=config.MARGIN_X,
-        margin_y=config.MARGIN_Y,
+        smoothing_alpha=0.40,  # Fast & smooth tracking
+        dead_zone_px=2.0,      # Minimal dead zone for high sensitivity
+        margin_x=0.08,          # Wide 8% active area
+        margin_y=0.08,
         dry_run=config.DRY_RUN_MODE
     )
 
     overlay = StatusOverlayUI() if config.USE_STATUS_OVERLAY else None
 
-    print(f"[VisionMac] Initialization Complete.")
-    print(f"[VisionMac] Display Resolution: {action_engine.screen_w}x{action_engine.screen_h}")
-    print("[VisionMac] Press 'Esc' or 'q' to stop.")
+    print(f"[VisionMac] Active Display Bounds: {action_engine.screen_w}x{action_engine.screen_h}")
+    print("[VisionMac] Show hand to move mouse. Press 'Esc' or 'q' to Quit.")
 
     prev_time = time.time()
     last_hand_seen_time = time.time()
-    last_action_desc = "System Ready"
+    last_action_desc = "Move Hand to Control"
 
     try:
         while True:
@@ -65,7 +65,7 @@ def main():
                 print("[ERROR] Camera frame capture failed.")
                 break
 
-            # Mirror frame horizontally for intuitive self-view
+            # Mirror frame horizontally for natural self-view
             frame = cv2.flip(frame, 1)
 
             # 1. Track Hand
@@ -75,60 +75,56 @@ def main():
             # 2. Recognize Gesture
             gesture, confidence = recognizer.process(normalized_lm)
 
-            # 3. Safety Auto-Pause Timeout Check
+            # 3. Safety Auto-Pause Check
             now = time.time()
             if hand_detected:
                 last_hand_seen_time = now
             else:
                 if now - last_hand_seen_time > config.AUTO_PAUSE_TIMEOUT_SEC:
-                    if not action_engine.is_paused:
-                        action_engine.set_pause(True)
-                        last_action_desc = "Auto-Paused (No Hand)"
+                    action_engine.is_paused = True
+                    last_action_desc = "Auto-Paused (No Hand)"
 
-            # 4. Action Execution & Auto-Unpause
+            # 4. Action Execution
             if hand_detected:
+                # If open palm shown, toggle pause
                 if gesture == GESTURE_OPEN_PALM:
-                    action_engine.set_pause(True)
-                    last_action_desc = "Control PAUSED"
-
+                    action_engine.is_paused = True
+                    last_action_desc = "PAUSED (Open Palm)"
+                elif gesture == GESTURE_OPEN_PALM:
+                    pass
                 else:
-                    # Auto-unpause when any active control gesture is presented
-                    if action_engine.is_paused and gesture in (GESTURE_POINT, GESTURE_PINCH, GESTURE_FIST, GESTURE_TWO_FINGER):
-                        action_engine.set_pause(False)
-                        last_action_desc = "Control RESUMED"
+                    # Unpause automatically whenever hand is moving or gesturing
+                    action_engine.is_paused = False
 
-                    if not action_engine.is_paused:
-                        if gesture == GESTURE_POINT:
-                            index_tip = normalized_lm[8]
-                            pos = action_engine.move_cursor(index_tip["x"], index_tip["y"])
-                            last_action_desc = f"Move to {pos}"
+                if not action_engine.is_paused:
+                    # Action Dispatch
+                    if gesture == GESTURE_PINCH:
+                        clicked = action_engine.left_click()
+                        last_action_desc = "Left Click" if clicked else "Pinch Held"
 
-                        elif gesture == GESTURE_PINCH:
-                            clicked = action_engine.left_click()
-                            if clicked:
-                                last_action_desc = "Left Click"
+                    elif gesture == GESTURE_FIST:
+                        rclicked = action_engine.right_click()
+                        last_action_desc = "Right Click" if rclicked else "Fist Held"
 
-                        elif gesture == GESTURE_FIST:
-                            rclicked = action_engine.right_click()
-                            if rclicked:
-                                last_action_desc = "Right Click"
-
-                        elif gesture == GESTURE_TWO_FINGER:
-                            index_tip = normalized_lm[8]
-                            middle_tip = normalized_lm[12]
-                            mid_y = (index_tip["y"] + middle_tip["y"]) / 2.0
-                            scrolled_clicks = action_engine.scroll(mid_y)
-                            if scrolled_clicks != 0:
-                                direction = "UP" if scrolled_clicks > 0 else "DOWN"
-                                last_action_desc = f"Scroll {direction}"
+                    elif gesture == GESTURE_TWO_FINGER:
+                        index_tip = normalized_lm[8]
+                        middle_tip = normalized_lm[12]
+                        mid_y = (index_tip["y"] + middle_tip["y"]) / 2.0
+                        scrolled_clicks = action_engine.scroll(mid_y)
+                        if scrolled_clicks != 0:
+                            direction = "UP" if scrolled_clicks > 0 else "DOWN"
+                            last_action_desc = f"Scroll {direction}"
                         else:
-                            action_engine.reset_smoothing()
+                            last_action_desc = "Scrolling..."
                     else:
-                        action_engine.reset_smoothing()
+                        # DEFAULT: Track index fingertip (landmark 8) directly to cursor
+                        index_tip = normalized_lm[8]
+                        pos = action_engine.move_cursor(index_tip["x"], index_tip["y"])
+                        last_action_desc = f"Moving Cursor {pos}"
             else:
                 action_engine.reset_smoothing()
 
-            # 5. Draw Hand Overlay
+            # 5. Draw Hand Skeleton Overlay
             if hand_detected:
                 frame = tracker.draw_landmarks(frame, pixel_lm)
 
@@ -137,51 +133,15 @@ def main():
             fps = 1.0 / (curr_time - prev_time + 1e-6)
             prev_time = curr_time
 
-            # Render Camera HUD Text
+            # Render Camera Feed HUD Text
             state_str = "🔴 PAUSED" if action_engine.is_paused else "🟢 ACTIVE"
             state_color = (0, 0, 255) if action_engine.is_paused else (0, 255, 0)
-            gesture_text = GESTURE_EMOJI_MAP.get(gesture, gesture)
+            gesture_text = GESTURE_EMOJI_MAP.get(gesture, "🖐️ TRACKING")
 
-            cv2.putText(
-                frame,
-                f"VisionMac - {state_str}",
-                (10, 25),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.55,
-                state_color,
-                2,
-                cv2.LINE_AA,
-            )
-            cv2.putText(
-                frame,
-                f"Gesture: {gesture_text} ({int(confidence * 100)}%)",
-                (10, 50),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.55,
-                (255, 255, 255),
-                1,
-                cv2.LINE_AA,
-            )
-            cv2.putText(
-                frame,
-                f"Action: {last_action_desc}",
-                (10, 75),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                (0, 215, 255),
-                1,
-                cv2.LINE_AA,
-            )
-            cv2.putText(
-                frame,
-                f"FPS: {fps:.1f} | Esc / q to Quit",
-                (10, 95),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.4,
-                (180, 180, 180),
-                1,
-                cv2.LINE_AA,
-            )
+            cv2.putText(frame, f"VisionMac - {state_str}", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, state_color, 2, cv2.LINE_AA)
+            cv2.putText(frame, f"Gesture: {gesture_text}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
+            cv2.putText(frame, f"Action: {last_action_desc}", (10, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 215, 255), 1, cv2.LINE_AA)
+            cv2.putText(frame, f"FPS: {fps:.1f} | Esc/q to Quit", (10, 95), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (180, 180, 180), 1, cv2.LINE_AA)
 
             cv2.imshow(config.WINDOW_NAME, frame)
 
@@ -191,23 +151,23 @@ def main():
                     is_paused=action_engine.is_paused,
                     gesture_text=gesture_text,
                     action_text=last_action_desc,
-                    confidence_pct=int(confidence * 100)
+                    confidence_pct=int(confidence * 100) if hand_detected else 0
                 )
 
-            # Global Panic Key Check (Esc key code 27 or 'q' key code 113)
+            # Emergency Exit Check
             key = cv2.waitKey(1) & 0xFF
             if key == config.EMERGENCY_QUIT_KEY or key == ord("q"):
-                print("[VisionMac] Emergency exit key pressed. Stopping...")
+                print("[VisionMac] Stopping...")
                 break
 
     except KeyboardInterrupt:
-        print("[VisionMac] Keyboard interrupt received.")
+        print("[VisionMac] Interrupted.")
     finally:
         if overlay is not None:
             overlay.close()
         cap.release()
         cv2.destroyAllWindows()
-        print("[VisionMac] Shutdown complete.")
+        print("[VisionMac] Stopped.")
 
 
 if __name__ == "__main__":
