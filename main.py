@@ -32,13 +32,14 @@ def main():
 
     if not cap.isOpened():
         print(f"[ERROR] Could not open camera index {config.CAMERA_INDEX}.")
+        print("Please check macOS System Settings > Privacy & Security > Camera permissions.")
         sys.exit(1)
 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
 
     tracker = HandTracker(max_hands=1)
-    recognizer = GestureRecognizer(history_size=5)
+    recognizer = GestureRecognizer(history_size=3)
     action_engine = ActionEngine(
         smoothing_alpha=config.SMOOTHING_ALPHA,
         dead_zone_px=config.DEAD_ZONE_PX,
@@ -55,7 +56,7 @@ def main():
 
     prev_time = time.time()
     last_hand_seen_time = time.time()
-    last_action_desc = "System Initialized"
+    last_action_desc = "System Ready"
 
     try:
         while True:
@@ -84,44 +85,46 @@ def main():
                         action_engine.set_pause(True)
                         last_action_desc = "Auto-Paused (No Hand)"
 
-            # 4. Action Execution
+            # 4. Action Execution & Auto-Unpause
             if hand_detected:
                 if gesture == GESTURE_OPEN_PALM:
                     action_engine.set_pause(True)
                     last_action_desc = "Control PAUSED"
 
-                elif gesture in (GESTURE_FIST, GESTURE_PINCH) and action_engine.is_paused:
-                    action_engine.set_pause(False)
-                    last_action_desc = "Control RESUMED"
+                else:
+                    # Auto-unpause when any active control gesture is presented
+                    if action_engine.is_paused and gesture in (GESTURE_POINT, GESTURE_PINCH, GESTURE_FIST, GESTURE_TWO_FINGER):
+                        action_engine.set_pause(False)
+                        last_action_desc = "Control RESUMED"
 
-                elif not action_engine.is_paused:
-                    if gesture == GESTURE_POINT:
-                        index_tip = normalized_lm[8]
-                        pos = action_engine.move_cursor(index_tip["x"], index_tip["y"])
-                        last_action_desc = f"Move to {pos}"
+                    if not action_engine.is_paused:
+                        if gesture == GESTURE_POINT:
+                            index_tip = normalized_lm[8]
+                            pos = action_engine.move_cursor(index_tip["x"], index_tip["y"])
+                            last_action_desc = f"Move to {pos}"
 
-                    elif gesture == GESTURE_PINCH:
-                        clicked = action_engine.left_click()
-                        if clicked:
-                            last_action_desc = "Left Click"
+                        elif gesture == GESTURE_PINCH:
+                            clicked = action_engine.left_click()
+                            if clicked:
+                                last_action_desc = "Left Click"
 
-                    elif gesture == GESTURE_FIST:
-                        rclicked = action_engine.right_click()
-                        if rclicked:
-                            last_action_desc = "Right Click"
+                        elif gesture == GESTURE_FIST:
+                            rclicked = action_engine.right_click()
+                            if rclicked:
+                                last_action_desc = "Right Click"
 
-                    elif gesture == GESTURE_TWO_FINGER:
-                        index_tip = normalized_lm[8]
-                        middle_tip = normalized_lm[12]
-                        mid_y = (index_tip["y"] + middle_tip["y"]) / 2.0
-                        scrolled_clicks = action_engine.scroll(mid_y)
-                        if scrolled_clicks != 0:
-                            direction = "UP" if scrolled_clicks > 0 else "DOWN"
-                            last_action_desc = f"Scroll {direction}"
+                        elif gesture == GESTURE_TWO_FINGER:
+                            index_tip = normalized_lm[8]
+                            middle_tip = normalized_lm[12]
+                            mid_y = (index_tip["y"] + middle_tip["y"]) / 2.0
+                            scrolled_clicks = action_engine.scroll(mid_y)
+                            if scrolled_clicks != 0:
+                                direction = "UP" if scrolled_clicks > 0 else "DOWN"
+                                last_action_desc = f"Scroll {direction}"
+                        else:
+                            action_engine.reset_smoothing()
                     else:
                         action_engine.reset_smoothing()
-                else:
-                    action_engine.reset_smoothing()
             else:
                 action_engine.reset_smoothing()
 
