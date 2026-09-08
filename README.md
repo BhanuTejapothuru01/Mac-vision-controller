@@ -126,8 +126,4 @@ Press **`Esc`** or **`q`** inside the camera window to stop the controller at an
 - [ ] **Custom Gesture Trainer**: GUI utility allowing users to record and train custom hand gestures.
 - [ ] **Dual Hand Control**: Support left hand for modifier keys (Shift, Cmd) and right hand for cursor control.
 
----
 
-## 📄 License
-
-This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
