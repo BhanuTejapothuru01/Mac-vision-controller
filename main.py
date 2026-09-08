@@ -1,6 +1,6 @@
 """
 VisionMac - Main Entry Point
-Ultra-Responsive Hand & Cursor Control System
+Ultra-Lightweight Touchless macOS Controller Loop
 """
 
 import time
@@ -27,48 +27,50 @@ GESTURE_EMOJI_MAP = {
 
 def main():
     print("=" * 60)
-    print(" 🖐️ VisionMac - macOS Touchless Controller Starting...")
+    print(" 🖐️ VisionMac - Ultra-Lightweight Controller Starting...")
     print("=" * 60)
 
     cap = cv2.VideoCapture(config.CAMERA_INDEX)
     if not cap.isOpened():
         print(f"[ERROR] Could not open camera index {config.CAMERA_INDEX}.")
-        print("Please check macOS System Settings > Privacy & Security > Camera.")
         sys.exit(1)
 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, config.FRAME_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, config.FRAME_HEIGHT)
 
     tracker = HandTracker(max_hands=1)
-    recognizer = GestureRecognizer(history_size=2)  # Fast 2-frame response
+    recognizer = GestureRecognizer(history_size=2)
     action_engine = ActionEngine(
-        smoothing_alpha=0.40,  # Fast & smooth tracking
-        dead_zone_px=2.0,      # Minimal dead zone for high sensitivity
-        margin_x=0.08,          # Wide 8% active area
-        margin_y=0.08,
+        smoothing_alpha=config.SMOOTHING_ALPHA,
+        dead_zone_px=config.DEAD_ZONE_PX,
+        margin_x=config.MARGIN_X,
+        margin_y=config.MARGIN_Y,
         dry_run=config.DRY_RUN_MODE
     )
 
     overlay = StatusOverlayUI() if config.USE_STATUS_OVERLAY else None
 
     print(f"[VisionMac] Active Display Bounds: {action_engine.screen_w}x{action_engine.screen_h}")
-    print("[VisionMac] Show hand to move mouse. Press 'Esc' or 'q' to Quit.")
+    print("[VisionMac] Show hand to control Mac. Press 'Esc' or 'q' to Quit.")
 
     prev_time = time.time()
     last_hand_seen_time = time.time()
     last_action_desc = "Move Hand to Control"
+    frame_target_delay = 1.0 / config.TARGET_FPS
 
     try:
         while True:
+            loop_start = time.time()
+
             ret, frame = cap.read()
             if not ret:
                 print("[ERROR] Camera frame capture failed.")
                 break
 
-            # Mirror frame horizontally for natural self-view
+            # Mirror frame horizontally
             frame = cv2.flip(frame, 1)
 
-            # 1. Track Hand
+            # 1. Track Hand (using downsampled AI inference)
             normalized_lm, pixel_lm = tracker.process_frame(frame)
             hand_detected = len(pixel_lm) == 21
 
@@ -84,20 +86,15 @@ def main():
                     action_engine.is_paused = True
                     last_action_desc = "Auto-Paused (No Hand)"
 
-            # 4. Action Execution
+            # 4. Action Dispatch
             if hand_detected:
-                # If open palm shown, toggle pause
                 if gesture == GESTURE_OPEN_PALM:
                     action_engine.is_paused = True
                     last_action_desc = "PAUSED (Open Palm)"
-                elif gesture == GESTURE_OPEN_PALM:
-                    pass
                 else:
-                    # Unpause automatically whenever hand is moving or gesturing
                     action_engine.is_paused = False
 
                 if not action_engine.is_paused:
-                    # Action Dispatch
                     if gesture == GESTURE_PINCH:
                         clicked = action_engine.left_click()
                         last_action_desc = "Left Click" if clicked else "Pinch Held"
@@ -117,7 +114,6 @@ def main():
                         else:
                             last_action_desc = "Scrolling..."
                     else:
-                        # DEFAULT: Track index fingertip (landmark 8) directly to cursor
                         index_tip = normalized_lm[8]
                         pos = action_engine.move_cursor(index_tip["x"], index_tip["y"])
                         last_action_desc = f"Moving Cursor {pos}"
@@ -138,9 +134,9 @@ def main():
             state_color = (0, 0, 255) if action_engine.is_paused else (0, 255, 0)
             gesture_text = GESTURE_EMOJI_MAP.get(gesture, "🖐️ TRACKING")
 
-            cv2.putText(frame, f"VisionMac - {state_str}", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, state_color, 2, cv2.LINE_AA)
-            cv2.putText(frame, f"Gesture: {gesture_text}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
-            cv2.putText(frame, f"Action: {last_action_desc}", (10, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 215, 255), 1, cv2.LINE_AA)
+            cv2.putText(frame, f"VisionMac - {state_str}", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.55, state_color, 2, cv2.LINE_AA)
+            cv2.putText(frame, f"Gesture: {gesture_text}", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+            cv2.putText(frame, f"Action: {last_action_desc}", (10, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 215, 255), 1, cv2.LINE_AA)
             cv2.putText(frame, f"FPS: {fps:.1f} | Esc/q to Quit", (10, 95), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (180, 180, 180), 1, cv2.LINE_AA)
 
             cv2.imshow(config.WINDOW_NAME, frame)
@@ -159,6 +155,12 @@ def main():
             if key == config.EMERGENCY_QUIT_KEY or key == ord("q"):
                 print("[VisionMac] Stopping...")
                 break
+
+            # FPS Governor: Paces loop execution to save CPU & battery
+            elapsed = time.time() - loop_start
+            sleep_needed = frame_target_delay - elapsed
+            if sleep_needed > 0.001:
+                time.sleep(sleep_needed)
 
     except KeyboardInterrupt:
         print("[VisionMac] Interrupted.")

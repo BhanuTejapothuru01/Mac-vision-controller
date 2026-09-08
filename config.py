@@ -1,34 +1,38 @@
 """
-VisionMac - Configuration Settings
+VisionMac - Lightweight Configuration Settings
 """
 
 import os
 
-# Camera Configuration
+# Camera Capture Configuration
 CAMERA_INDEX = 0
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
-FPS_TARGET = 30
+TARGET_FPS = 30  # FPS governor for low CPU utilization
+
+# AI Inference Downsampling (4x faster processing & lower memory footprint)
+INFERENCE_WIDTH = 320
+INFERENCE_HEIGHT = 240
 
 # Debug and UI Configuration
-WINDOW_NAME = "VisionMac - Camera Feed"
-SHOW_DEBUG_OVERLAY = True
-USE_STATUS_OVERLAY = True  # Enable Tkinter floating status window HUD
+WINDOW_NAME = "VisionMac - Live Feed"
+SHOW_CAMERA_WINDOW = True
+USE_STATUS_OVERLAY = True  # Lightweight Tkinter HUD
 
 # Control & Action Engine Configuration
-DRY_RUN_MODE = False  # Set to True to log mouse actions without moving real system cursor
+DRY_RUN_MODE = False
 
 # Safety Controls
-AUTO_PAUSE_TIMEOUT_SEC = 2.0  # Auto-pause control if no hand is detected for > 2.0s
-EMERGENCY_QUIT_KEY = 27       # Esc key code in OpenCV (also 'q' key supported)
+AUTO_PAUSE_TIMEOUT_SEC = 2.0  # Auto-pause if hand leaves frame for > 2.0s
+EMERGENCY_QUIT_KEY = 27       # Esc key code in OpenCV
 
 # Mouse Movement Tuning
-SMOOTHING_ALPHA = 0.25  # EMA weight: lower = smoother, higher = faster response
-DEAD_ZONE_PX = 4.0      # Ignore movement deltas smaller than 4 pixels to prevent tremor jitter
-MARGIN_X = 0.12         # Active interaction padding (12% horizontal border)
-MARGIN_Y = 0.12         # Active interaction padding (12% vertical border)
+SMOOTHING_ALPHA = 0.40  # Fast response
+DEAD_ZONE_PX = 2.0      # Low threshold
+MARGIN_X = 0.08          # 8% border
+MARGIN_Y = 0.08
 
 # Gesture Debounce Timers (Seconds)
-CLICK_DEBOUNCE_SEC = 0.45
-RIGHT_CLICK_DEBOUNCE_SEC = 0.60
-SCROLL_SENSITIVITY = 15.0  # Scroll step multiplier
+CLICK_DEBOUNCE_SEC = 0.40
+RIGHT_CLICK_DEBOUNCE_SEC = 0.55
+SCROLL_SENSITIVITY = 12.0
